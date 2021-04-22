@@ -1,37 +1,113 @@
-## Welcome to GitHub Pages
+## **How do we generate and display code coverage?**
 
-You can use the [editor on GitHub](https://github.com/adiemlerpi/adiemlerpi.github.io/edit/main/README.md) to maintain and preview the content for your website in Markdown files.
+We rely on coverlet to generate a code coverage opencover.xml file which
+sonarcloud interprets and displays. This is executed as a part of our CI
+process. The steps of this process are as follows:
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+1.  In the circleci folder, within the config.yml, Sonar Scanner is
+    > started.
 
-### Markdown
+  ---------------------------
+  dotnet-sonarscanner begin
+  ---------------------------
 
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
+2.  Included in this command is the location that sonar will look for
+    > the code coverage report
 
-```markdown
-Syntax highlighted code block
+  --------------------------------------------------------------------------------------------------
+  /d:\"sonar.cs.opencover.reportsPaths=\*\\test\\unit\\TestResults\\\*\*\\coverage.opencover.xml\"
+  --------------------------------------------------------------------------------------------------
 
-# Header 1
-## Header 2
-### Header 3
+3.  Then, the solution is built, generating the appropriate respective
+    > dlls and pdbs
 
-- Bulleted
-- List
+  --------------
+  dotnet build
+  --------------
 
-1. Numbered
-2. List
+4.  Afterwards, the test suite gets executed along with instructions for
+    > coverlet to generate the code coverage report (in opencover
+    > format). Two examples of how we currently do this are shown below
 
-**Bold** and _Italic_ and `Code` text
++------------------------------------------------------------------------+
+| dotnet test \--settings coverlet.runsettings \--no-restore \--no-build |
+|                                                                        |
+| orrrrrrrr                                                              |
++------------------------------------------------------------------------+
 
-[Link](url) and ![Image](src)
-```
+> With a coverlet.runsettings xml file specifying at minimum, format.
+> Additional runsetting options can be found
+> [[here]{.ul}](https://docs.microsoft.com/en-us/visualstudio/test/customizing-code-coverage-analysis?view=vs-2017)
 
-For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
++--------------------------------------------------------+
+| \<?xml version=\"1.0\" encoding=\"utf-8\" ?\>          |
+|                                                        |
+| \<RunSettings\>                                        |
+|                                                        |
+| \<DataCollectionRunSettings\>                          |
+|                                                        |
+| \<DataCollectors\>                                     |
+|                                                        |
+| \<DataCollector friendlyName=\"XPlat Code Coverage\"\> |
+|                                                        |
+| \<Configuration\>                                      |
+|                                                        |
+| \<Format\>opencover\</Format\>                         |
+|                                                        |
+| \</Configuration\>                                     |
+|                                                        |
+| \</DataCollector\>                                     |
+|                                                        |
+| \</DataCollectors\>                                    |
+|                                                        |
+| \</DataCollectionRunSettings\>                         |
+|                                                        |
+| \</RunSettings\>                                       |
++--------------------------------------------------------+
 
-### Jekyll Themes
+> Or alternatively, this command explicitly targets a specific test
+> project.
 
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/adiemlerpi/adiemlerpi.github.io/settings/pages). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
+  ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  coverlet \<target test dll\> \--target \"dotnet\" \--targetargs \'test \<target test csproj\> \--no-build \--no-restore \--logger \"trx\"\' \--output=\"test/UnitTests/\" \--format=\"opencover\"
+  ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-### Support or Contact
+5.  Sonar Scanner is stopped
 
-Having trouble with Pages? Check out our [documentation](https://docs.github.com/categories/github-pages-basics/) or [contact support](https://support.github.com/contact) and we’ll help you sort it out.
+  --------------------------------------------------------------
+  dotnet-sonarscanner end /d:\"sonar.login=\$env:SONAR_TOKEN\"
+  --------------------------------------------------------------
+
+##   **"Why isn't my project's code coverage showing up?"**
+
+![](media/image1.png){width="6.5in" height="3.0416666666666665in"}
+
+Here are some common causes for code coverage not showing up in sonar
+cloud:
+
+1.  The solution is being built in release mode and tested on that.
+
++----------------------------------------------------------------------+
+| \- run:                                                              |
+|                                                                      |
+| name: build solution                                                 |
+|                                                                      |
+| command: dotnet build -c Release                                     |
+|                                                                      |
+| \- run:                                                              |
+|                                                                      |
+| name: run tests                                                      |
+|                                                                      |
+| command: dotnet test \--settings coverlet.runsettings \--no-restore  |
+| \--no-build -c Release                                               |
++----------------------------------------------------------------------+
+
+> In this case, code coverage cannot be generated because it relies on
+> use of the pdb files which aren't generated in release mode. The
+> alternative is to make sure you build in debug mode in order to create
+> a code coverage report
+
+2.  The file location Sonar Scanner is looking at doesn't match where
+    > the coverage report is generated.
+
+3.  The format of the report is not opencover.xml
